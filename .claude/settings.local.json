@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git fetch:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite:*)",
+      "Bash(npm run:*)",
+      "Bash(kill %1)",
+      "Bash(curl -s http://localhost:3000/api/products/search?q=test)",
+      "Bash(node:*)",
+      "Bash(git checkout:*)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(git ls-tree:*)",
+      "Bash(psql:*)",
+      "Bash(where psql:*)",
+      "Bash(C:/Program Files/PostgreSQL/17/bin/psql.exe:*)",
+      "Bash(netstat -ano)",
+      "Bash(findstr \":3000\")",
+      "Bash(taskkill:*)",
+      "Bash(cmd:*)",
+      "Bash(powershell:*)"
+    ]
+  }
+}
