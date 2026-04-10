@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import pool from '../db';
 import { ApiResponse, UATConfirmRequest } from '../types';
 
+// POST /api/uat/confirm — 正式簽核（supervisor / admin only）
 export async function saveUATConfirmation(req: Request, res: Response): Promise<void> {
   const body = req.body as UATConfirmRequest;
 
@@ -10,16 +11,23 @@ export async function saveUATConfirmation(req: Request, res: Response): Promise<
     return;
   }
 
+  let client;
   try {
-    const result = await pool.query(
+    client = await pool.connect();
+    const result = await client.query(
       `INSERT INTO uat_confirmations
-         (confirmer_name, department, confirm_date, result, check_items, remarks)
-       VALUES ($1,$2,$3,$4,$5,$6)
+         (confirmer_name, department, confirm_date, result, check_items, item_remarks, remarks)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
        RETURNING id, created_at`,
-      [body.confirmer_name, body.department ?? '',
-       body.confirm_date, body.result,
-       JSON.stringify(body.check_items ?? {}),
-       body.remarks ?? '']
+      [
+        body.confirmer_name,
+        body.department ?? '',
+        body.confirm_date,
+        body.result,
+        JSON.stringify(body.check_items ?? {}),
+        JSON.stringify(body.item_remarks ?? {}),
+        body.remarks ?? '',
+      ]
     );
     res.status(201).json({
       success: true,
@@ -27,6 +35,93 @@ export async function saveUATConfirmation(req: Request, res: Response): Promise<
       message: 'UAT 簽核已儲存',
     } satisfies ApiResponse);
   } catch (err) {
-    res.status(500).json({ success: false, error: String(err) } satisfies ApiResponse);
+    console.error('[UAT/saveConfirmation Error]', err);
+    res.status(500).json({ success: false, error: '伺服器錯誤，請稍後再試' } satisfies ApiResponse);
+  } finally {
+    client?.release();
+  }
+}
+
+// POST /api/uat/draft — 儲存草稿（任何已登入者）
+export async function saveDraft(req: Request, res: Response): Promise<void> {
+  const { check_items, item_remarks } = req.body as {
+    check_items?: Record<string, boolean>;
+    item_remarks?: Record<string, string>;
+  };
+
+  let client;
+  try {
+    client = await pool.connect();
+    const result = await client.query(
+      `INSERT INTO uat_drafts (saved_by, saved_role, check_items, item_remarks)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, saved_at`,
+      [
+        req.user!.displayName,
+        req.user!.role,
+        JSON.stringify(check_items ?? {}),
+        JSON.stringify(item_remarks ?? {}),
+      ]
+    );
+    res.status(201).json({
+      success: true,
+      data: result.rows[0],
+      message: '確認進度已暫存',
+    } satisfies ApiResponse);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[UAT/saveDraft Error]', msg);
+    // 資料表不存在時給出明確提示
+    const userMsg = msg.includes('relation') && msg.includes('does not exist')
+      ? 'uat_drafts 資料表尚未建立，請執行 Migration 005'
+      : '伺服器錯誤，請稍後再試';
+    res.status(500).json({ success: false, error: userMsg } satisfies ApiResponse);
+  } finally {
+    client?.release();
+  }
+}
+
+// GET /api/uat/history — 查詢簽核紀錄（任何已登入者）
+export async function getUATHistory(_req: Request, res: Response): Promise<void> {
+  let client;
+  try {
+    client = await pool.connect();
+    const result = await client.query(
+      `SELECT id, confirmer_name, department, confirm_date, result,
+              check_items, item_remarks, remarks, created_at
+       FROM uat_confirmations
+       ORDER BY created_at DESC
+       LIMIT 100`
+    );
+    res.json({ success: true, data: result.rows } satisfies ApiResponse);
+  } catch (err) {
+    console.error('[UAT/getHistory Error]', err);
+    res.status(500).json({ success: false, error: '伺服器錯誤，請稍後再試' } satisfies ApiResponse);
+  } finally {
+    client?.release();
+  }
+}
+
+// GET /api/uat/draft/latest — 取得最新草稿（任何已登入者）
+export async function getLatestDraft(req: Request, res: Response): Promise<void> {
+  let client;
+  try {
+    client = await pool.connect();
+    const result = await client.query(
+      `SELECT id, saved_by, saved_role, check_items, item_remarks, saved_at
+       FROM uat_drafts
+       ORDER BY saved_at DESC
+       LIMIT 1`
+    );
+    if ((result.rowCount ?? 0) === 0) {
+      res.json({ success: true, data: null } satisfies ApiResponse);
+      return;
+    }
+    res.json({ success: true, data: result.rows[0] } satisfies ApiResponse);
+  } catch (err) {
+    console.error('[UAT/getLatestDraft Error]', err);
+    res.status(500).json({ success: false, error: '伺服器錯誤，請稍後再試' } satisfies ApiResponse);
+  } finally {
+    client?.release();
   }
 }

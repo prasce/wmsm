@@ -9,11 +9,16 @@ import WMSM030 from './pages/WMSM030';
 import LabelPreview from './pages/LabelPreview';
 import PrintHistory from './pages/PrintHistory';
 import UATConfirm from './pages/UATConfirm';
+import UATHistory from './pages/UATHistory';
+import AccountAdmin from './pages/AccountAdmin';
 import { ModuleId, AuthUser } from './types';
 import { setAuthToken, setUnauthorizedHandler } from './api/client';
 
 const TOKEN_KEY = 'wmsm_auth_token';
 const USER_KEY  = 'wmsm_auth_user';
+
+// 底部 prev/next 不包含 admin（管理頁不在作業流程中）
+const WORKFLOW_MODULES: ModuleId[] = ['m020', 'm030', 'label', 'history', 'confirm'];
 
 function loadPersistedSession(): { token: string; user: AuthUser } | null {
   const token = localStorage.getItem(TOKEN_KEY) ?? sessionStorage.getItem(TOKEN_KEY);
@@ -38,7 +43,6 @@ export default function App() {
 
   const showToast = useCallback((msg: string) => setToast(msg), []);
 
-  // 註冊自動登出 handler（401 時觸發）
   useEffect(() => {
     setUnauthorizedHandler(() => {
       localStorage.removeItem(TOKEN_KEY);
@@ -68,7 +72,6 @@ export default function App() {
     setCurrent('m020');
   }
 
-  // ── Guard：未登入顯示登入頁 ──────────────────────────────
   if (!authUser) {
     return (
       <>
@@ -78,24 +81,29 @@ export default function App() {
     );
   }
 
+  const inWorkflow = WORKFLOW_MODULES.includes(current);
+  const workflowIdx = WORKFLOW_MODULES.indexOf(current);
+
   return (
     <>
-      <TopBar user={authUser} onLogout={handleLogout} />
+      <TopBar user={authUser} onLogout={handleLogout} onToast={showToast} />
       <StepNav current={current} onSwitch={setCurrent} />
 
       <div style={{ display: 'flex', minHeight: 'calc(100vh - 100px)' }}>
-        <SideBar current={current} onSwitch={setCurrent} />
+        <SideBar current={current} onSwitch={setCurrent} userRole={authUser.role} />
 
         <div style={{ flex: 1, padding: '24px 28px', overflowY: 'auto', maxWidth: '1100px' }}>
           {current === 'm020'    && <WMSM020 onToast={showToast} onSwitchHistory={() => setCurrent('history')} operator={authUser.displayName} />}
           {current === 'm030'    && <WMSM030 onToast={showToast} operator={authUser.displayName} />}
           {current === 'label'   && <LabelPreview />}
           {current === 'history' && <PrintHistory />}
-          {current === 'confirm' && <UATConfirm onToast={showToast} user={authUser} />}
+          {current === 'confirm'     && <UATConfirm onToast={showToast} user={authUser} />}
+          {current === 'uat-history' && <UATHistory />}
+          {current === 'admin'       && <AccountAdmin onToast={showToast} />}
         </div>
       </div>
 
-      {/* 底部導覽列 */}
+      {/* 底部導覽列（只在作業流程頁面顯示 prev/next）*/}
       <div style={{
         background: 'var(--white)', borderTop: '2px solid var(--g2)',
         padding: '18px 28px', display: 'flex', alignItems: 'center',
@@ -105,18 +113,20 @@ export default function App() {
         <div style={{ fontSize: '13px', color: 'var(--mid)' }}>
           實務確認版 v1.0 &nbsp;|&nbsp; <strong style={{ color: 'var(--g1)' }}>WMSM 麥頭印標系統</strong> &nbsp;|&nbsp; 僅供確認用途
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => {
-            const modules: ModuleId[] = ['m020','m030','label','history','confirm'];
-            const idx = modules.indexOf(current);
-            if (idx > 0) setCurrent(modules[idx - 1]);
-          }}>‹ 上一頁</button>
-          <button className="btn btn-primary btn-sm" onClick={() => {
-            const modules: ModuleId[] = ['m020','m030','label','history','confirm'];
-            const idx = modules.indexOf(current);
-            if (idx < modules.length - 1) setCurrent(modules[idx + 1]);
-          }}>下一頁 ›</button>
-        </div>
+        {inWorkflow && (
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button className="btn btn-ghost btn-sm"
+              disabled={workflowIdx <= 0}
+              onClick={() => setCurrent(WORKFLOW_MODULES[workflowIdx - 1])}>
+              ‹ 上一頁
+            </button>
+            <button className="btn btn-primary btn-sm"
+              disabled={workflowIdx >= WORKFLOW_MODULES.length - 1}
+              onClick={() => setCurrent(WORKFLOW_MODULES[workflowIdx + 1])}>
+              下一頁 ›
+            </button>
+          </div>
+        )}
       </div>
 
       <Toast message={toast} onClose={() => setToast('')} />

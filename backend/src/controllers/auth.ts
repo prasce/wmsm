@@ -100,8 +100,8 @@ export async function register(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // Fix C1: 只允許 operator / viewer，admin 帳號不可由 API 建立
-  const allowedRoles = ['operator', 'viewer'];
+  // 只允許 supervisor / operator / viewer，admin 帳號不可由 API 建立
+  const allowedRoles = ['supervisor', 'operator', 'viewer'];
   const userRole = allowedRoles.includes(role ?? '') ? role : 'operator';
 
   let client;
@@ -144,4 +144,57 @@ export async function forgotPassword(_req: Request, res: Response): Promise<void
     success: true,
     message: '若帳號存在，請聯絡系統管理員重置密碼。',
   } satisfies ApiResponse);
+}
+
+// POST /api/auth/change-password — 自行變更密碼（任何已登入者，需驗證舊密碼）
+export async function changePassword(req: Request, res: Response): Promise<void> {
+  const { current_password, new_password } = req.body as {
+    current_password?: string;
+    new_password?: string;
+  };
+
+  if (!current_password || !new_password) {
+    res.status(400).json({ success: false, error: '請提供目前密碼與新密碼' } satisfies ApiResponse);
+    return;
+  }
+  if (new_password.length < 8) {
+    res.status(400).json({ success: false, error: '新密碼至少 8 個字元' } satisfies ApiResponse);
+    return;
+  }
+  if (current_password === new_password) {
+    res.status(400).json({ success: false, error: '新密碼不可與目前密碼相同' } satisfies ApiResponse);
+    return;
+  }
+
+  let client;
+  try {
+    client = await pool.connect();
+    const result = await client.query(
+      'SELECT password_hash FROM users WHERE id = $1 AND active = true',
+      [req.user!.userId]
+    );
+    if ((result.rowCount ?? 0) === 0) {
+      res.status(404).json({ success: false, error: '帳號不存在或已停用' } satisfies ApiResponse);
+      return;
+    }
+
+    const match = await bcrypt.compare(sha256hex(current_password), result.rows[0].password_hash);
+    if (!match) {
+      res.status(401).json({ success: false, error: '目前密碼不正確' } satisfies ApiResponse);
+      return;
+    }
+
+    const newHash = await bcrypt.hash(sha256hex(new_password), BCRYPT_ROUNDS);
+    await client.query(
+      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+      [newHash, req.user!.userId]
+    );
+
+    res.json({ success: true, message: '密碼已成功變更' } satisfies ApiResponse);
+  } catch (err) {
+    console.error('[Auth/changePassword Error]', err);
+    res.status(500).json({ success: false, error: '伺服器錯誤，請稍後再試' } satisfies ApiResponse);
+  } finally {
+    client?.release();
+  }
 }

@@ -51,8 +51,36 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ success: false, error: '伺服器內部錯誤' });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`WMSM Backend 啟動於 http://localhost:${PORT}`);
+});
+
+// 優雅關閉：SIGTERM / SIGINT（Ctrl+C）時等現有連線處理完再退出
+const shutdown = (signal: string) => {
+  console.log(`\n[${signal}] 準備關閉伺服器...`);
+  server.close(() => {
+    console.log('伺服器已關閉，資料庫連線池釋放中...');
+    pool.end().then(() => {
+      console.log('資料庫連線池已關閉，程序結束');
+      process.exit(0);
+    });
+  });
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
+
+// EADDRINUSE：清楚提示 port 衝突，避免誤以為是程式 bug
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[錯誤] Port ${PORT} 已被佔用！`);
+    console.error(`請執行以下指令找出並結束佔用程序：`);
+    console.error(`  Windows: netstat -ano | findstr :${PORT}  → taskkill /PID <PID> /F`);
+    console.error(`  Mac/Linux: lsof -ti:${PORT} | xargs kill -9`);
+    process.exit(1);
+  } else {
+    throw err;
+  }
 });
 
 export default app;

@@ -142,6 +142,7 @@ export interface UATConfirmRequest {
   confirm_date: string;
   result: 'pass' | 'conditional_pass' | 'fail';
   check_items: Record<string, boolean>;
+  item_remarks: Record<string, string>;   // 逐項意見 {item_key: remark}
   remarks: string;
 }
 

@@ -337,7 +337,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             borderRadius: '8px',
             position: 'relative',
           }}>
-            帳號由系統管理員建立<br />請洽倉儲管理部門
+            帳號由系統管理員建立<br />請洽分機 8101 倉儲管理部門
           </div>
         </div>
       </div>

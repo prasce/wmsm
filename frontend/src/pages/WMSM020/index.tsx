@@ -213,7 +213,7 @@ export default function WMSM020({ onToast, onSwitchHistory, operator = '倉儲�
           <span className="badge badge-new">可略過，直接手動填寫</span>
         </div>
         <div className="card-body">
-          <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 1fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>
             <div className="field">
               <div className="field-label">採購單號</div>
               <div className="input-group">
@@ -231,7 +231,7 @@ export default function WMSM020({ onToast, onSwitchHistory, operator = '倉儲�
               <input type="text" value={supplier} readOnly className={supplier ? 'auto-filled' : ''} placeholder="由採購單帶入" />
               <div className="field-hint">由採購單自動帶入</div>
             </div>
-            <div className="field col2">
+            <div className="field">
               <div className="field-label">備註</div>
               <input type="text" value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="（選填）" />
             </div>

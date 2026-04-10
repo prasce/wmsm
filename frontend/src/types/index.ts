@@ -1,4 +1,23 @@
-export type ModuleId = 'm020' | 'm030' | 'label' | 'history' | 'confirm';
+export type ModuleId = 'm020' | 'm030' | 'label' | 'history' | 'confirm' | 'uat-history' | 'admin';
+
+export type UserRole = 'admin' | 'supervisor' | 'operator' | 'viewer';
+
+export const ROLE_LABEL: Record<UserRole, string> = {
+  admin:      '系統管理員',
+  supervisor: '主管簽核',
+  operator:   '倉儲人員',
+  viewer:     '唯讀',
+};
+
+export interface UserAccount {
+  id: number;
+  username: string;
+  display_name: string;
+  role: UserRole;
+  active: boolean;
+  last_login_at: string | null;
+  created_at: string;
+}
 
 export interface Product {
   id: number;
@@ -94,12 +113,35 @@ export interface ApiResponse<T = unknown> {
   message?: string;
 }
 
+// ── UAT 簽核 ──────────────────────────────────────────────
+export interface UATHistoryItem {
+  id: number;
+  confirmer_name: string;
+  department: string;
+  confirm_date: string;
+  result: 'pass' | 'conditional_pass' | 'fail';
+  check_items: Record<string, boolean>;
+  item_remarks: Record<string, string>;
+  remarks: string;
+  created_at: string;
+}
+
+export interface UATConfirmRequest {
+  confirmer_name: string;
+  department: string;
+  confirm_date: string;
+  result: 'pass' | 'conditional_pass' | 'fail';
+  check_items: Record<string, boolean>;
+  item_remarks: Record<string, string>;
+  remarks: string;
+}
+
 // ── Auth ──────────────────────────────────────────────────
 export interface AuthUser {
   userId: number;
   username: string;
   displayName: string;
-  role: 'admin' | 'operator' | 'viewer';
+  role: UserRole;
 }
 
 export interface LoginResponse {

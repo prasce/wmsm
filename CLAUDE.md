@@ -17,29 +17,34 @@
 
 ## 目錄結構
 ```
-0326wome/
+wmsm/
 ├── CLAUDE.md                       ← 專案記憶（你在這裡）
 ├── README.md                       ← 快速啟動指南
 ├── database/
 │   ├── schema.sql                  ← PostgreSQL DDL + 種子資料
 │   └── migrations/
-│       └── 001_add_users.sql       ← users 資料表
+│       ├── 001_add_users.sql           ← users 資料表
+│       ├── 002_add_import_print_batch.sql
+│       ├── 003_add_supervisor_role.sql ← 新增 supervisor 角色
+│       ├── 004_add_uat_item_remarks.sql ← uat_confirmations 加入 item_remarks JSONB
+│       └── 005_add_uat_drafts.sql      ← uat_drafts 草稿資料表
 ├── backend/                        ← Express + TypeScript
 │   ├── .env                        ← DB + JWT 設定（已建立）
 │   ├── .env.example
 │   ├── src/
-│   │   ├── app.ts                  ← 入口 + 全域錯誤 middleware（JWT_SECRET 防呆）
+│   │   ├── app.ts                  ← 入口 + 全域錯誤 middleware + 優雅關閉（SIGINT/SIGTERM）
 │   │   ├── db.ts                   ← pg Pool（讀 DB_HOST/USER/PASSWORD）
 │   │   ├── types/index.ts
-│   │   ├── routes/index.ts         ← 公開路由 + requireAuth guard
+│   │   ├── routes/index.ts         ← 公開路由 + requireAuth + requireRole 守衛
 │   │   ├── middleware/
-│   │   │   └── auth.ts             ← requireAuth JWT middleware
+│   │   │   └── auth.ts             ← requireAuth JWT + requireRole(...roles) middleware
 │   │   └── controllers/
-│   │       ├── auth.ts             ← login / register / forgotPassword
+│   │       ├── auth.ts             ← login / register / forgotPassword / changePassword
 │   │       ├── products.ts
 │   │       ├── purchaseOrders.ts
 │   │       ├── printJobs.ts
 │   │       ├── imports.ts          ← xlsx 解析 + 驗證
+│   │       ├── users.ts            ← listUsers / updateUser / toggleActive / resetPassword
 │   │       └── uat.ts
 │   └── package.json
 ├── frontend/                       ← React + TSX + Vite
@@ -47,17 +52,24 @@
 │   │   └── WMSM030_template.xlsx   ← Excel 範本（靜態檔案）
 │   ├── src/
 │   │   ├── main.tsx
-│   │   ├── App.tsx                 ← authUser 狀態 + LoginPage guard
-│   │   ├── types/index.ts
-│   │   ├── api/client.ts           ← fetch 封裝（JWT token store + 401 自動登出）
-│   │   ├── components/             ← TopBar / StepNav / SideBar / Toast
+│   │   ├── App.tsx                 ← authUser 狀態 + LoginPage guard + AccountAdmin 路由
+│   │   ├── types/index.ts          ← UserRole / ROLE_LABEL / UserAccount 型別
+│   │   ├── api/client.ts           ← fetch 封裝（JWT + PATCH helper + 帳號管理 API）
+│   │   ├── components/
+│   │   │   ├── TopBar.tsx          ← 角色徽章 + 🔑 帳號變更密碼入口
+│   │   │   ├── SideBar.tsx         ← 依角色動態顯示選單項目
+│   │   │   ├── ChangePasswordModal.tsx ← 共用變更/重設密碼 Modal（密碼強度指示器）
+│   │   │   ├── StepNav.tsx
+│   │   │   └── Toast.tsx
 │   │   ├── pages/
-│   │   │   ├── Login/index.tsx     ← 登入頁（左白右綠分割版面）
+│   │   │   ├── Login/index.tsx     ← 登入頁（右側「請洽倉儲管理部門」）
 │   │   │   ├── WMSM020/index.tsx   ← 手動套印
 │   │   │   ├── WMSM030/index.tsx   ← Excel 批次匯入（含下載範本 + 標籤預覽）
 │   │   │   ├── LabelPreview/index.tsx
 │   │   │   ├── PrintHistory/index.tsx
-│   │   │   └── UATConfirm/index.tsx
+│   │   │   ├── UATConfirm/index.tsx    ← 確認簽核（草稿自動存擋 + 主管簽核 + 完成成功畫面）
+│   │   │   ├── UATHistory/index.tsx   ← 簽核記錄查詢（篩選 / 展開逐項明細）
+│   │   │   └── AccountAdmin/index.tsx ← 帳號管理（列表 / 新增 / 編輯 / 停用 / 重設密碼）
 │   │   ├── utils/
 │   │   │   └── printLabels.ts      ← 8cm×11cm 標籤列印（每頁一張）
 │   │   └── styles/globals.css
@@ -69,6 +81,28 @@
 └── .claude/skills/                 ← /code-review /refactor /release
 ```
 
+## 角色權限矩陣
+| 功能 | admin | supervisor | operator | viewer |
+|------|:---:|:---:|:---:|:---:|
+| 建立列印 / Excel 匯入 | ✅ | ✅ | ✅ | ❌ |
+| UAT 頁面填寫確認項目 | ✅ | ✅ | ✅ | ❌ |
+| UAT 草稿暫存（儲存確認進度）| ✅ | ✅ | ✅ | ❌ |
+| UAT 主管簽核（提交）| ✅ | ✅ | ❌ | ❌ |
+| 查看簽核記錄 | ✅ | ✅ | ✅ | ✅ |
+| 查看歷史 / 標籤 | ✅ | ✅ | ✅ | ✅ |
+| 帳號管理頁面 | ✅ | ❌ | ❌ | ❌ |
+| 建立帳號（API register）| ✅ | ❌ | ❌ | ❌ |
+| 自行變更密碼 | ✅ | ✅ | ✅ | ✅ |
+| 重設他人密碼 | ✅ | ❌ | ❌ | ❌ |
+
+> supervisor 可進入 WMSM020/030 操作功能，方便在簽核前親自驗證 operator 反映的問題。
+
+## 帳號管理政策
+- 帳號由 admin 透過 `POST /api/auth/register` 建立，**不提供公開自助註冊**
+- `admin` 帳號為種子資料，不可由 API 建立（`allowedRoles` 強制排除）
+- 停用 / 角色變更不可針對 `admin` 帳號（controller 層防護）
+- 密碼儲存：`bcrypt(SHA256(plaintext))`，BCRYPT_ROUNDS = 12
+
 ## 已知重要修正
 | 問題 | 根因 | 解法 |
 |------|------|------|
@@ -76,8 +110,10 @@
 | 後端 500 空 body | `pool.connect()` 在 try 外，unhandled rejection | 移進 try，改用 `let client` + `client?.release()` |
 | 前端 SyntaxError empty JSON | `res.json()` 無防護 | 改用 `res.text()` + try JSON.parse |
 | API 全部 500 | Vite proxy 指向 port 3001，後端在 3000 | `vite.config.ts` 改為 port 3000 |
-| WMSM030 execute 永遠 404 | `import_batches` BEFORE INSERT Trigger 覆寫 `batch_no`，TS 自產的值從未進 DB | INSERT 不傳 `batch_no`，改用 `RETURNING id, batch_no` 取回 trigger 產生值 |
-| 標籤列印一頁出現 4 張 | `printLabels.ts` 使用 A4 尺寸排版 | 改為 `@page { size: 8cm 11cm; margin: 0 }`，每張 label `page-break-after: always` |
+| WMSM030 execute 永遠 404 | `import_batches` BEFORE INSERT Trigger 覆寫 `batch_no` | INSERT 不傳 `batch_no`，改用 `RETURNING id, batch_no` |
+| 標籤列印一頁出現 4 張 | `printLabels.ts` 使用 A4 尺寸排版 | 改為 `@page { size: 8cm 11cm; margin: 0 }` |
+| EADDRINUSE port 衝突 | process 未正常關閉 | `server.on('error')` 攔截並印出 kill 指令；SIGINT/SIGTERM 優雅關閉 |
+| UAT 草稿暫存 500 | `uat_drafts` 資料表未建立 | 執行 Migration 005；controller 加入 "relation does not exist" 偵測給出明確提示 |
 
 ## ⚠️ Trigger 產生欄位注意事項
 `print_jobs.job_no` 與 `import_batches.batch_no` 均由 **BEFORE INSERT Trigger** 自動產生，
@@ -116,5 +152,14 @@ curl -X POST http://localhost:3000/api/auth/login \
 curl -X POST http://localhost:3000/api/auth/register \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token>" \
-  -d '{"username":"user1","password":"Pass@1234","displayName":"倉儲人員"}'
+  -d '{"username":"user1","password":"Pass@1234","displayName":"王小明","role":"operator"}'
+
+# 套用 Migration 003（新增 supervisor 角色）
+psql -U postgres -d wmsm -f database/migrations/003_add_supervisor_role.sql
+
+# 套用 Migration 004（UAT 逐項意見欄位）
+psql -U postgres -d wmsm -f database/migrations/004_add_uat_item_remarks.sql
+
+# 套用 Migration 005（UAT 草稿資料表）
+psql -U postgres -d wmsm -f database/migrations/005_add_uat_drafts.sql
 ```

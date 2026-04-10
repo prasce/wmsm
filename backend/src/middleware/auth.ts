@@ -2,11 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { ApiResponse } from '../types';
 
+export type UserRole = 'admin' | 'supervisor' | 'operator' | 'viewer';
+
 export interface AuthPayload {
   userId: number;
   username: string;
   displayName: string;
-  role: 'admin' | 'operator' | 'viewer';
+  role: UserRole;
 }
 
 declare global {
@@ -31,3 +33,13 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     res.status(401).json({ success: false, error: 'Token 無效或已過期，請重新登入' } satisfies ApiResponse);
   }
 }
+
+/** 角色守衛：只允許指定角色通過 */
+export const requireRole = (...roles: UserRole[]) =>
+  (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      res.status(403).json({ success: false, error: '權限不足，無法執行此操作' } satisfies ApiResponse);
+      return;
+    }
+    next();
+  };

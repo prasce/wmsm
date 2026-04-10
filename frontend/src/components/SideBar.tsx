@@ -1,18 +1,22 @@
-import { ModuleId } from '../types';
+import { ModuleId, UserRole } from '../types';
 
-interface SideBarItem { id: ModuleId; label: string; section: string }
+interface SideBarItem { id: ModuleId; label: string; section: string; minRole?: UserRole[] }
 const ITEMS: SideBarItem[] = [
-  { id: 'm020',    label: '麥頭標籤套印',    section: '進貨作業' },
-  { id: 'm030',    label: 'Excel 批次匯入',  section: '進貨作業' },
+  { id: 'm020',    label: '麥頭標籤套印',    section: '進貨作業',   minRole: ['admin', 'supervisor', 'operator'] },
+  { id: 'm030',    label: 'Excel 批次匯入',  section: '進貨作業',   minRole: ['admin', 'supervisor', 'operator'] },
   { id: 'label',   label: '標籤樣式確認',    section: '標籤與紀錄' },
   { id: 'history', label: '列印紀錄查詢',    section: '標籤與紀錄' },
-  { id: 'confirm', label: '確認簽核',        section: '驗收' },
+  { id: 'confirm',     label: '確認簽核',    section: '驗收' },           // 全角色可填寫確認項目
+  { id: 'uat-history', label: '簽核記錄',    section: '驗收' },           // 全角色可查詢歷史
+  { id: 'admin',       label: '帳號管理',    section: '系統管理', minRole: ['admin'] },
 ];
 
-interface Props { current: ModuleId; onSwitch: (id: ModuleId) => void }
+interface Props { current: ModuleId; onSwitch: (id: ModuleId) => void; userRole: UserRole }
 
-export default function SideBar({ current, onSwitch }: Props) {
-  const sections = [...new Set(ITEMS.map((i) => i.section))];
+export default function SideBar({ current, onSwitch, userRole }: Props) {
+  const visible = ITEMS.filter((i) => !i.minRole || i.minRole.includes(userRole));
+  const sections = [...new Set(visible.map((i) => i.section))];
+
   return (
     <div style={{
       width: '240px', flexShrink: 0,
@@ -26,7 +30,7 @@ export default function SideBar({ current, onSwitch }: Props) {
             color: 'var(--soft)', textTransform: 'uppercase',
             padding: '0 18px', marginBottom: '8px',
           }}>{sec}</div>
-          {ITEMS.filter((i) => i.section === sec).map((item) => {
+          {visible.filter((i) => i.section === sec).map((item) => {
             const active = current === item.id;
             return (
               <div

@@ -1,4 +1,4 @@
-import { ApiResponse, ImportPreviewResult, LoginResponse, PrintHistoryItem, PrintStats, Product, PurchaseOrder } from '../types';
+import { ApiResponse, ImportPreviewResult, LoginResponse, PrintHistoryItem, PrintStats, Product, PurchaseOrder, UserAccount, UserRole } from '../types';
 
 const BASE = '/api';
 
@@ -33,6 +33,21 @@ async function get<T>(path: string): Promise<ApiResponse<T>> {
   const headers: Record<string, string> = {};
   if (_authToken) headers['Authorization'] = `Bearer ${_authToken}`;
   const res = await fetch(`${BASE}${path}`, { headers });
+  if (res.status === 401) {
+    handleUnauthorized();
+    return { success: false, error: 'Session 已過期，請重新登入' };
+  }
+  return parseJSON<T>(res);
+}
+
+async function patch<T>(path: string, body: unknown): Promise<ApiResponse<T>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (_authToken) headers['Authorization'] = `Bearer ${_authToken}`;
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(body),
+  });
   if (res.status === 401) {
     handleUnauthorized();
     return { success: false, error: 'Session 已過期，請重新登入' };
@@ -103,16 +118,49 @@ export const api = {
     confirm_date: string;
     result: string;
     check_items: Record<string, boolean>;
+    item_remarks: Record<string, string>;
     remarks: string;
   }) => post('/uat/confirm', payload),
+
+  saveUATDraft: (check_items: Record<string, boolean>, item_remarks: Record<string, string>) =>
+    post<{ id: number; saved_at: string }>('/uat/draft', { check_items, item_remarks }),
+
+  getLatestUATDraft: () =>
+    get<{
+      id: number;
+      saved_by: string;
+      saved_role: string;
+      check_items: Record<string, boolean>;
+      item_remarks: Record<string, string>;
+      saved_at: string;
+    } | null>('/uat/draft/latest'),
+
+  getUATHistory: () =>
+    get<import('../types').UATHistoryItem[]>('/uat/history'),
 
   // ── Auth ────────────────────────────────────────────────
   login: (username: string, password: string) =>
     post<LoginResponse>('/auth/login', { username, password }),
 
-  register: (username: string, password: string, displayName?: string) =>
-    post<{ id: number; username: string; display_name: string; role: string }>('/auth/register', { username, password, displayName }),
+  register: (username: string, password: string, displayName: string, role: UserRole) =>
+    post<UserAccount>('/auth/register', { username, password, displayName, role }),
 
   forgotPassword: (username: string) =>
     post('/auth/forgot-password', { username }),
+
+  // ── 帳號管理（admin only）────────────────────────────────
+  listUsers: () =>
+    get<UserAccount[]>('/users'),
+
+  updateUser: (id: number, payload: { display_name?: string; role?: UserRole }) =>
+    patch<UserAccount>(`/users/${id}`, payload),
+
+  toggleUserActive: (id: number) =>
+    patch<UserAccount>(`/users/${id}/toggle-active`, {}),
+
+  changePassword: (current_password: string, new_password: string) =>
+    post('/auth/change-password', { current_password, new_password }),
+
+  resetUserPassword: (id: number, new_password: string) =>
+    post(`/users/${id}/reset-password`, { new_password }),
 };
