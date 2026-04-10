@@ -111,6 +111,7 @@ export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
   message?: string;
+  meta?: { total: number; page: number; limit: number };
 }
 
 // ── UAT 簽核 ──────────────────────────────────────────────

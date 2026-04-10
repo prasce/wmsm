@@ -32,43 +32,55 @@ async function parseJSON<T>(res: Response): Promise<ApiResponse<T>> {
 async function get<T>(path: string): Promise<ApiResponse<T>> {
   const headers: Record<string, string> = {};
   if (_authToken) headers['Authorization'] = `Bearer ${_authToken}`;
-  const res = await fetch(`${BASE}${path}`, { headers });
-  if (res.status === 401) {
-    handleUnauthorized();
-    return { success: false, error: 'Session 已過期，請重新登入' };
+  try {
+    const res = await fetch(`${BASE}${path}`, { headers });
+    if (res.status === 401) {
+      handleUnauthorized();
+      return { success: false, error: 'Session 已過期，請重新登入' };
+    }
+    return parseJSON<T>(res);
+  } catch {
+    return { success: false, error: '網路連線失敗，請確認網路狀態' };
   }
-  return parseJSON<T>(res);
 }
 
 async function patch<T>(path: string, body: unknown): Promise<ApiResponse<T>> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (_authToken) headers['Authorization'] = `Bearer ${_authToken}`;
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'PATCH',
-    headers,
-    body: JSON.stringify(body),
-  });
-  if (res.status === 401) {
-    handleUnauthorized();
-    return { success: false, error: 'Session 已過期，請重新登入' };
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(body),
+    });
+    if (res.status === 401) {
+      handleUnauthorized();
+      return { success: false, error: 'Session 已過期，請重新登入' };
+    }
+    return parseJSON<T>(res);
+  } catch {
+    return { success: false, error: '網路連線失敗，請確認網路狀態' };
   }
-  return parseJSON<T>(res);
 }
 
 async function post<T>(path: string, body: unknown): Promise<ApiResponse<T>> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (_authToken) headers['Authorization'] = `Bearer ${_authToken}`;
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
-  // 公開 auth 路由不觸發自動登出
-  if (res.status === 401 && !path.startsWith('/auth/')) {
-    handleUnauthorized();
-    return { success: false, error: 'Session 已過期，請重新登入' };
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+    // 公開 auth 路由不觸發自動登出
+    if (res.status === 401 && !path.startsWith('/auth/')) {
+      handleUnauthorized();
+      return { success: false, error: 'Session 已過期，請重新登入' };
+    }
+    return parseJSON<T>(res);
+  } catch {
+    return { success: false, error: '網路連線失敗，請確認網路狀態' };
   }
-  return parseJSON<T>(res);
 }
 
 export const api = {
@@ -135,8 +147,18 @@ export const api = {
       saved_at: string;
     } | null>('/uat/draft/latest'),
 
-  getUATHistory: () =>
-    get<import('../types').UATHistoryItem[]>('/uat/history'),
+  getUATHistory: (params?: { page?: number; limit?: number }) => {
+    const qs = params
+      ? '?' + new URLSearchParams(
+          Object.fromEntries(
+            Object.entries(params)
+              .filter(([, v]) => v !== undefined)
+              .map(([k, v]) => [k, String(v)])
+          )
+        ).toString()
+      : '';
+    return get<import('../types').UATHistoryItem[]>(`/uat/history${qs}`);
+  },
 
   // ── Auth ────────────────────────────────────────────────
   login: (username: string, password: string) =>

@@ -63,32 +63,40 @@ function DetailRow({ row }: { row: UATHistoryItem }) {
   );
 }
 
+const PAGE_LIMIT = 20;
+
 export default function UATHistory() {
   const [items, setItems]       = useState<UATHistoryItem[]>([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState('');
   const [expanded, setExpanded] = useState<number | null>(null);
   const [filter, setFilter]     = useState<'all' | 'pass' | 'conditional_pass' | 'fail'>('all');
+  const [page, setPage]         = useState(1);
+  const [total, setTotal]       = useState(0);
 
   useEffect(() => {
     void (async () => {
-      const res = await api.getUATHistory();
+      setLoading(true);
+      setExpanded(null);
+      const res = await api.getUATHistory({ page, limit: PAGE_LIMIT });
       if (res.success && res.data) {
         setItems(res.data);
+        if (res.meta) setTotal(res.meta.total);
       } else {
         setError(res.error ?? '載入失敗');
       }
       setLoading(false);
     })();
-  }, []);
+  }, [page]);
 
   const displayed = filter === 'all' ? items : items.filter((i) => i.result === filter);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_LIMIT));
 
   return (
     <div style={{ maxWidth: '900px' }}>
       <h2 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '4px' }}>簽核記錄</h2>
       <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '20px' }}>
-        顯示最近 100 筆 UAT 確認簽核紀錄，點選列可展開逐項確認明細。
+        共 {total} 筆 UAT 確認簽核紀錄，每頁顯示 {PAGE_LIMIT} 筆，點選列可展開逐項確認明細。
       </p>
 
       {/* 篩選列 */}
@@ -192,6 +200,64 @@ export default function UATHistory() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* 分頁控制 */}
+      {!loading && !error && totalPages > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '16px' }}>
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            style={{
+              padding: '5px 14px', borderRadius: '6px', fontSize: '12px',
+              border: '1px solid #e5e7eb', background: page === 1 ? '#f9fafb' : '#fff',
+              color: page === 1 ? '#d1d5db' : '#374151', cursor: page === 1 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            ‹ 上一頁
+          </button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1)
+            .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+            .reduce<(number | '...')[]>((acc, p, idx, arr) => {
+              if (idx > 0 && (arr[idx - 1] as number) + 1 < p) acc.push('...');
+              acc.push(p);
+              return acc;
+            }, [])
+            .map((p, idx) =>
+              p === '...' ? (
+                <span key={`ellipsis-${idx}`} style={{ color: '#9ca3af', fontSize: '12px' }}>…</span>
+              ) : (
+                <button
+                  key={p}
+                  onClick={() => setPage(p as number)}
+                  style={{
+                    width: '32px', height: '32px', borderRadius: '6px', fontSize: '12px',
+                    border: page === p ? 'none' : '1px solid #e5e7eb',
+                    background: page === p ? '#374151' : '#fff',
+                    color: page === p ? '#fff' : '#374151',
+                    cursor: 'pointer', fontWeight: page === p ? 700 : 400,
+                  }}
+                >
+                  {p}
+                </button>
+              )
+            )}
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            style={{
+              padding: '5px 14px', borderRadius: '6px', fontSize: '12px',
+              border: '1px solid #e5e7eb', background: page === totalPages ? '#f9fafb' : '#fff',
+              color: page === totalPages ? '#d1d5db' : '#374151',
+              cursor: page === totalPages ? 'not-allowed' : 'pointer',
+            }}
+          >
+            下一頁 ›
+          </button>
+          <span style={{ fontSize: '12px', color: '#9ca3af', marginLeft: '4px' }}>
+            第 {page} / {totalPages} 頁
+          </span>
         </div>
       )}
     </div>

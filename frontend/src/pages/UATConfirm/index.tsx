@@ -42,7 +42,7 @@ export default function UATConfirm({ onToast, user }: Props) {
   const [loading,      setLoading]      = useState(false);
   const [saving,       setSaving]       = useState(false);
   const [draftInfo,    setDraftInfo]    = useState<{ saved_by: string; saved_role: string; saved_at: string } | null>(null);
-  const [submitted,    setSubmitted]    = useState<{ confirmer: string; dept: string; date: string; result: string } | null>(null);
+  const [submitted,    setSubmitted]    = useState<{ confirmer: string; dept: string; date: string; result: string; actualDoneCount: number } | null>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── 進入頁面自動載入最新草稿 ─────────────────────────
@@ -129,8 +129,8 @@ export default function UATConfirm({ onToast, user }: Props) {
       });
       if (res.success) {
         onToast('✅ UAT 簽核已儲存');
-        // 清空表單並顯示成功畫面
-        setSubmitted({ confirmer, dept, date: confirmDate, result });
+        // 清空表單並顯示成功畫面（先快照 doneCount，再清 checked）
+        setSubmitted({ confirmer, dept, date: confirmDate, result, actualDoneCount: doneCount });
         setChecked({});
         setItemRemarks({});
         setExpandedKeys(new Set());
@@ -175,7 +175,7 @@ export default function UATConfirm({ onToast, user }: Props) {
             ['部門 / 職稱', submitted.dept || '—'],
             ['確認日期', submitted.date],
             ['確認結果', RESULT_LABEL_MAP[submitted.result] ?? submitted.result],
-            ['確認項目', `${doneCount === 0 ? totalCount : doneCount} / ${totalCount} 項`],
+            ['確認項目', `${submitted.actualDoneCount} / ${totalCount} 項`],
           ].map(([label, val]) => (
             <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--faint)', fontSize: '13.5px' }}>
               <span style={{ color: 'var(--soft)' }}>{label}</span>
