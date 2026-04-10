@@ -1,6 +1,7 @@
 import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
 import routes from './routes';
 import pool from './db';
 import { requireAuth } from './middleware/auth';
@@ -14,7 +15,13 @@ if (!process.env.JWT_SECRET) {
 const app = express();
 const PORT = process.env.PORT ?? 3000;
 
-app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:3000'] }));
+// 開發模式允許 Vite dev server 跨來源；生產模式同 port 不需 CORS
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? []
+  : ['http://localhost:5173', 'http://localhost:3000'];
+app.use(cors({
+  origin: allowedOrigins.length ? allowedOrigins : false,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -43,6 +50,16 @@ app.get('/api/db-check', requireAuth, async (_req, res) => {
     res.status(500).json({ status: 'error', error: String(err) });
   }
 });
+
+// 生產模式：Express 同時服務前端靜態檔（React SPA）
+if (process.env.NODE_ENV === 'production') {
+  const frontendDist = path.join(__dirname, '..', '..', 'frontend', 'dist');
+  app.use(express.static(frontendDist));
+  // SPA fallback — 所有非 /api 路由都回傳 index.html（交給 React Router）
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+}
 
 // 全域錯誤 middleware — 確保所有未捕捉的錯誤都回傳 JSON（不回傳空 body）
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

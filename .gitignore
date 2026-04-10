@@ -22,3 +22,7 @@ Thumbs.db
 # Editor
 .vscode/
 *.swp
+
+# PM2 logs
+logs/
+*.log
