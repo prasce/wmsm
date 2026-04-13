@@ -134,8 +134,12 @@ export const api = {
     remarks: string;
   }) => post('/uat/confirm', payload),
 
-  saveUATDraft: (check_items: Record<string, boolean>, item_remarks: Record<string, string>) =>
-    post<{ id: number; saved_at: string }>('/uat/draft', { check_items, item_remarks }),
+  saveUATDraft: (
+    check_items: Record<string, boolean>,
+    item_remarks: Record<string, string>,
+    notify?: boolean,
+  ) =>
+    post<{ id: number; saved_at: string }>('/uat/draft', { check_items, item_remarks, notify: notify ?? false }),
 
   getLatestUATDraft: () =>
     get<{
@@ -174,7 +178,7 @@ export const api = {
   listUsers: () =>
     get<UserAccount[]>('/users'),
 
-  updateUser: (id: number, payload: { display_name?: string; role?: UserRole }) =>
+  updateUser: (id: number, payload: { display_name?: string; role?: UserRole; email?: string | null }) =>
     patch<UserAccount>(`/users/${id}`, payload),
 
   toggleUserActive: (id: number) =>

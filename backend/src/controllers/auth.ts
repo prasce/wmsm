@@ -1,16 +1,12 @@
 import { Request, Response } from 'express';
-import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import pool from '../db';
 import { ApiResponse } from '../types';
 import { AuthPayload } from '../middleware/auth';
+import { sha256hex } from '../utils/crypto';
 
 const BCRYPT_ROUNDS = 12;
-
-function sha256hex(plain: string): string {
-  return crypto.createHash('sha256').update(plain, 'utf8').digest('hex');
-}
 
 // POST /api/auth/login
 export async function login(req: Request, res: Response): Promise<void> {

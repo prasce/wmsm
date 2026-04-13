@@ -27,7 +27,8 @@ wmsm/
 │       ├── 002_add_import_print_batch.sql
 │       ├── 003_add_supervisor_role.sql ← 新增 supervisor 角色
 │       ├── 004_add_uat_item_remarks.sql ← uat_confirmations 加入 item_remarks JSONB
-│       └── 005_add_uat_drafts.sql      ← uat_drafts 草稿資料表
+│       ├── 005_add_uat_drafts.sql      ← uat_drafts 草稿資料表
+│       └── 006_email_notify_index.sql  ← 收件人查詢 partial index
 ├── backend/                        ← Express + TypeScript
 │   ├── .env                        ← DB + JWT 設定（已建立）
 │   ├── .env.example
@@ -162,4 +163,7 @@ psql -U postgres -d wmsm -f database/migrations/004_add_uat_item_remarks.sql
 
 # 套用 Migration 005（UAT 草稿資料表）
 psql -U postgres -d wmsm -f database/migrations/005_add_uat_drafts.sql
+
+# 套用 Migration 006（UAT 通知郵件收件人 index）
+psql -U postgres -d wmsm -f database/migrations/006_email_notify_index.sql
 ```

@@ -72,7 +72,7 @@ export default function UATConfirm({ onToast, user }: Props) {
   async function doSaveDraft(showToast = true) {
     setSaving(true);
     try {
-      const res = await api.saveUATDraft(checked, itemRemarks);
+      const res = await api.saveUATDraft(checked, itemRemarks, showToast);
       if (res.success) {
         setDraftInfo({ saved_by: user.displayName, saved_role: user.role, saved_at: new Date().toISOString() });
         if (showToast) onToast('✓ 確認進度已暫存');

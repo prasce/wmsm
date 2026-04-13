@@ -27,7 +27,7 @@ export default function AccountAdmin({ onToast }: Props) {
   const [form, setForm]           = useState(EMPTY_FORM);
   const [formErr, setFormErr]     = useState('');
   const [editId, setEditId]       = useState<number | null>(null);
-  const [editForm, setEditForm]   = useState<{ display_name: string; role: UserRole }>({ display_name: '', role: 'operator' });
+  const [editForm, setEditForm]   = useState<{ display_name: string; role: UserRole; email: string }>({ display_name: '', role: 'operator', email: '' });
   const [resetTarget, setResetTarget] = useState<UserAccount | null>(null);
 
   const loadUsers = useCallback(async () => {
@@ -65,7 +65,11 @@ export default function AccountAdmin({ onToast }: Props) {
   }
 
   async function handleUpdate(id: number) {
-    const res = await api.updateUser(id, editForm);
+    const res = await api.updateUser(id, {
+      display_name: editForm.display_name,
+      role: editForm.role,
+      email: editForm.email.trim() || null,
+    });
     if (res.success) {
       onToast('✓ 帳號已更新');
       setEditId(null);
@@ -137,6 +141,7 @@ export default function AccountAdmin({ onToast }: Props) {
                     <th>帳號</th>
                     <th>顯示名稱</th>
                     <th>角色</th>
+                    <th>通知 Email</th>
                     <th>狀態</th>
                     <th>最後登入</th>
                     <th>建立日期</th>
@@ -179,6 +184,21 @@ export default function AccountAdmin({ onToast }: Props) {
                           </span>
                         )}
                       </td>
+                      <td style={{ fontSize: '12px' }}>
+                        {editId === u.id ? (
+                          <input
+                            type="email"
+                            value={editForm.email}
+                            placeholder="通知信箱（選填）"
+                            style={{ width: '160px', fontSize: '12px' }}
+                            onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                          />
+                        ) : (
+                          <span style={{ color: u.email ? '#1a5c35' : 'var(--soft)' }}>
+                            {u.email ?? '—'}
+                          </span>
+                        )}
+                      </td>
                       <td>
                         <span style={{
                           color: u.active ? 'var(--g1)' : 'var(--err)',
@@ -205,7 +225,7 @@ export default function AccountAdmin({ onToast }: Props) {
                           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                             <button className="btn btn-outline btn-sm" onClick={() => {
                               setEditId(u.id);
-                              setEditForm({ display_name: u.display_name, role: u.role });
+                              setEditForm({ display_name: u.display_name, role: u.role, email: u.email ?? '' });
                             }}>編輯</button>
                             <button
                               className="btn btn-outline btn-sm"

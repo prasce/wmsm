@@ -1,20 +1,18 @@
 import { Request, Response } from 'express';
-import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import pool from '../db';
 import { ApiResponse } from '../types';
 import { UserRole } from '../middleware/auth';
+import { sha256hex } from '../utils/crypto';
 
 const BCRYPT_ROUNDS = 12;
-function sha256hex(plain: string): string {
-  return crypto.createHash('sha256').update(plain, 'utf8').digest('hex');
-}
 
 export interface UserRow {
   id: number;
   username: string;
   display_name: string;
   role: UserRole;
+  email: string | null;
   active: boolean;
   last_login_at: string | null;
   created_at: string;
@@ -26,7 +24,7 @@ export async function listUsers(_req: Request, res: Response): Promise<void> {
   try {
     client = await pool.connect();
     const result = await client.query<UserRow>(
-      `SELECT id, username, display_name, role, active, last_login_at, created_at
+      `SELECT id, username, display_name, role, email, active, last_login_at, created_at
        FROM users
        ORDER BY created_at ASC`
     );
@@ -42,11 +40,24 @@ export async function listUsers(_req: Request, res: Response): Promise<void> {
 // PATCH /api/users/:id — 更新 display_name / role（admin only）
 export async function updateUser(req: Request, res: Response): Promise<void> {
   const targetId = Number(req.params.id);
-  const { display_name, role } = req.body as { display_name?: string; role?: string };
+  const { display_name, role, email } = req.body as {
+    display_name?: string;
+    role?: string;
+    email?: string | null;
+  };
 
-  if (!display_name && !role) {
-    res.status(400).json({ success: false, error: '請提供 display_name 或 role' } satisfies ApiResponse);
+  if (!display_name && !role && email === undefined) {
+    res.status(400).json({ success: false, error: '請提供 display_name、role 或 email' } satisfies ApiResponse);
     return;
+  }
+
+  // email 格式驗證
+  if (email !== undefined) {
+    const trimmed = email?.trim() ?? null;
+    if (trimmed && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      res.status(400).json({ success: false, error: 'email 格式不正確' } satisfies ApiResponse);
+      return;
+    }
   }
 
   // 不允許透過 API 將任何人升為 admin
@@ -79,11 +90,16 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
 
     if (display_name) { setClauses.push(`display_name = $${idx++}`); values.push(display_name.trim()); }
     if (role)         { setClauses.push(`role = $${idx++}`);         values.push(role); }
+    if (email !== undefined) {
+      const trimmedEmail = email?.trim() ?? null;
+      setClauses.push(`email = $${idx++}`);
+      values.push(trimmedEmail || null);  // 空字串轉 NULL
+    }
     values.push(targetId);
 
     const result = await client.query<UserRow>(
       `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${idx}
-       RETURNING id, username, display_name, role, active, last_login_at, created_at`,
+       RETURNING id, username, display_name, role, email, active, last_login_at, created_at`,
       values
     );
 
@@ -125,7 +141,7 @@ export async function toggleActive(req: Request, res: Response): Promise<void> {
     const newActive = !check.rows[0].active;
     const result = await client.query<UserRow>(
       `UPDATE users SET active = $1, updated_at = NOW() WHERE id = $2
-       RETURNING id, username, display_name, role, active, last_login_at, created_at`,
+       RETURNING id, username, display_name, role, email, active, last_login_at, created_at`,
       [newActive, targetId]
     );
 
@@ -159,6 +175,12 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
     const check = await client.query('SELECT id, role FROM users WHERE id = $1', [targetId]);
     if ((check.rowCount ?? 0) === 0) {
       res.status(404).json({ success: false, error: '帳號不存在' } satisfies ApiResponse);
+      return;
+    }
+
+    // W1 修正：不可重設 admin 帳號密碼（防止 admin 互相覆蓋）
+    if (check.rows[0].role === 'admin') {
+      res.status(403).json({ success: false, error: '不可重設 admin 帳號密碼' } satisfies ApiResponse);
       return;
     }
 

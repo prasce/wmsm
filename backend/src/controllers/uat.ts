@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../db';
 import { ApiResponse, UATConfirmRequest } from '../types';
+import { sendDraftNotification } from '../utils/email';
 
 // POST /api/uat/confirm — 正式簽核（supervisor / admin only）
 export async function saveUATConfirmation(req: Request, res: Response): Promise<void> {
@@ -43,16 +44,18 @@ export async function saveUATConfirmation(req: Request, res: Response): Promise<
 }
 
 // POST /api/uat/draft — 儲存草稿（任何已登入者）
+// notify: true 時（手動暫存）向主管 / admin 發送郵件通知；false（自動暫存）不發信
 export async function saveDraft(req: Request, res: Response): Promise<void> {
-  const { check_items, item_remarks } = req.body as {
+  const { check_items, item_remarks, notify } = req.body as {
     check_items?: Record<string, boolean>;
     item_remarks?: Record<string, string>;
+    notify?: boolean;
   };
 
   let client;
   try {
     client = await pool.connect();
-    const result = await client.query(
+    const result = await client.query<{ id: number; saved_at: string }>(
       `INSERT INTO uat_drafts (saved_by, saved_role, check_items, item_remarks)
        VALUES ($1, $2, $3, $4)
        RETURNING id, saved_at`,
@@ -63,11 +66,25 @@ export async function saveDraft(req: Request, res: Response): Promise<void> {
         JSON.stringify(item_remarks ?? {}),
       ]
     );
+    const row = result.rows[0];
+
+    // 先回傳 response，不等候郵件
     res.status(201).json({
       success: true,
-      data: result.rows[0],
+      data: row,
       message: '確認進度已暫存',
     } satisfies ApiResponse);
+
+    // 手動暫存才觸發郵件通知（fire-and-forget）
+    if (notify === true) {
+      sendDraftNotification({
+        savedBy:     req.user!.displayName,
+        savedRole:   req.user!.role,
+        savedAt:     row.saved_at,
+        checkItems:  check_items  ?? {},
+        itemRemarks: item_remarks ?? {},
+      });
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[UAT/saveDraft Error]', msg);
@@ -82,18 +99,31 @@ export async function saveDraft(req: Request, res: Response): Promise<void> {
 }
 
 // GET /api/uat/history — 查詢簽核紀錄（任何已登入者）
-export async function getUATHistory(_req: Request, res: Response): Promise<void> {
+// 支援分頁：?page=1&limit=20（limit 上限 100，預設 20）
+export async function getUATHistory(req: Request, res: Response): Promise<void> {
+  const page  = Math.max(1, parseInt(String(req.query.page  ?? '1'),  10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '20'), 10) || 20));
+  const offset = (page - 1) * limit;
+
   let client;
   try {
     client = await pool.connect();
-    const result = await client.query(
+    const dataResult = await client.query(
       `SELECT id, confirmer_name, department, confirm_date, result,
               check_items, item_remarks, remarks, created_at
        FROM uat_confirmations
        ORDER BY created_at DESC
-       LIMIT 100`
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
     );
-    res.json({ success: true, data: result.rows } satisfies ApiResponse);
+    const countResult = await client.query(
+      'SELECT COUNT(*)::int AS total FROM uat_confirmations'
+    );
+    res.json({
+      success: true,
+      data: dataResult.rows,
+      meta: { total: countResult.rows[0].total, page, limit },
+    } satisfies ApiResponse);
   } catch (err) {
     console.error('[UAT/getHistory Error]', err);
     res.status(500).json({ success: false, error: '伺服器錯誤，請稍後再試' } satisfies ApiResponse);
