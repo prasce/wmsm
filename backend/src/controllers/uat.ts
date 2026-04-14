@@ -55,6 +55,8 @@ export async function saveDraft(req: Request, res: Response): Promise<void> {
   let client;
   try {
     client = await pool.connect();
+    // 每次暫存前先清除同一使用者的舊草稿，避免 DB 無限成長
+    await client.query('DELETE FROM uat_drafts WHERE saved_by = $1', [req.user!.displayName]);
     const result = await client.query<{ id: number; saved_at: string }>(
       `INSERT INTO uat_drafts (saved_by, saved_role, check_items, item_remarks)
        VALUES ($1, $2, $3, $4)
@@ -133,6 +135,8 @@ export async function getUATHistory(req: Request, res: Response): Promise<void> 
 }
 
 // GET /api/uat/draft/latest — 取得最新草稿（任何已登入者）
+// 設計決策：回傳全域最新一筆（不限使用者），以便主管登入後能直接看到操作員填寫的進度。
+// UAT 視為單一共享表單，同時間只有一份進行中的確認作業。
 export async function getLatestDraft(req: Request, res: Response): Promise<void> {
   let client;
   try {

@@ -46,7 +46,7 @@ wmsm/
 │   │       ├── printJobs.ts
 │   │       ├── imports.ts          ← xlsx 解析 + 驗證
 │   │       ├── users.ts            ← listUsers / updateUser / toggleActive / resetPassword
-│   │       └── uat.ts
+│   │       └── uat.ts              ← saveUATConfirmation / saveDraft（暫存前刪舊草稿）/ getLatestDraft / getUATHistory
 │   └── package.json
 ├── frontend/                       ← React + TSX + Vite
 │   ├── public/
@@ -68,7 +68,7 @@ wmsm/
 │   │   │   ├── WMSM030/index.tsx   ← Excel 批次匯入（含下載範本 + 標籤預覽）
 │   │   │   ├── LabelPreview/index.tsx
 │   │   │   ├── PrintHistory/index.tsx
-│   │   │   ├── UATConfirm/index.tsx    ← 確認簽核（草稿自動存擋 + 主管簽核 + 完成成功畫面）
+│   │   │   ├── UATConfirm/index.tsx    ← 確認簽核（草稿自動存擋 + draftJustLoaded ref + 主管簽核 + 完成成功畫面）
 │   │   │   ├── UATHistory/index.tsx   ← 簽核記錄查詢（篩選 / 展開逐項明細）
 │   │   │   └── AccountAdmin/index.tsx ← 帳號管理（列表 / 新增 / 編輯 / 停用 / 重設密碼）
 │   │   ├── utils/
@@ -115,6 +115,10 @@ wmsm/
 | 標籤列印一頁出現 4 張 | `printLabels.ts` 使用 A4 尺寸排版 | 改為 `@page { size: 8cm 11cm; margin: 0 }` |
 | EADDRINUSE port 衝突 | process 未正常關閉 | `server.on('error')` 攔截並印出 kill 指令；SIGINT/SIGTERM 優雅關閉 |
 | UAT 草稿暫存 500 | `uat_drafts` 資料表未建立 | 執行 Migration 005；controller 加入 "relation does not exist" 偵測給出明確提示 |
+| 郵件內容 HTML injection | `buildHtml` 直接嵌入使用者輸入（remark / savedBy）| `email.ts` 加入 `escapeHtml()`，套用所有使用者欄位 |
+| SMTP To header injection | `display_name` 拼接為字串傳入 `to` | 改傳 `{ name, address }[]` 物件陣列，由 nodemailer 安全處理 |
+| 草稿載入後立即觸發自動暫存 | `setChecked / setItemRemarks` 觸發 auto-save `useEffect` | 加入 `draftJustLoaded` ref，草稿載入後跳過當次觸發 |
+| `uat_drafts` 無限累積 | 每次暫存新增一列，從未清除 | `saveDraft` 前先 `DELETE FROM uat_drafts WHERE saved_by = $1` |
 
 ## ⚠️ Trigger 產生欄位注意事項
 `print_jobs.job_no` 與 `import_batches.batch_no` 均由 **BEFORE INSERT Trigger** 自動產生，

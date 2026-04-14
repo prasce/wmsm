@@ -65,6 +65,16 @@ const ROLE_ZH: Record<string, string> = {
   viewer:     '唯讀',
 };
 
+// ── HTML 跳脫（防止 XSS / HTML injection）────────────────────
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ── HTML 郵件組裝 ────────────────────────────────────────────
 export interface DraftNotifyParams {
   savedBy:     string;
@@ -85,7 +95,7 @@ function buildHtml(p: DraftNotifyParams): string {
 
   const itemRows = Object.keys(ITEM_LABEL).map((key) => {
     const done   = !!p.checkItems[key];
-    const remark = p.itemRemarks[key]?.trim() ?? '';
+    const remark = escapeHtml(p.itemRemarks[key]?.trim() ?? '');
     return `
       <tr>
         <td style="padding:8px 10px;font-size:14px;border-bottom:1px solid #eee;text-align:center;width:36px;">
@@ -101,8 +111,8 @@ function buildHtml(p: DraftNotifyParams): string {
   }).join('');
 
   const metaRows = [
-    ['送簽人員', p.savedBy],
-    ['角色',     ROLE_ZH[p.savedRole] ?? p.savedRole],
+    ['送簽人員', escapeHtml(p.savedBy)],
+    ['角色',     escapeHtml(ROLE_ZH[p.savedRole] ?? p.savedRole)],
     ['儲存時間', savedAtLocal],
     ['已確認項目', `${doneCount} / ${TOTAL} 項`],
   ].map(([label, val]) => `
@@ -237,19 +247,20 @@ export function sendDraftNotification(params: DraftNotifyParams): void {
         return;
       }
 
-      const toList  = recipients.map((r) => `"${r.display_name}" <${r.email}>`).join(', ');
+      const toAddrs = recipients.map((r) => ({ name: r.display_name, address: r.email }));
       const dateStr = new Date(params.savedAt).toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei' });
 
       await getTransporter().sendMail({
         from:    process.env.EMAIL_FROM ?? process.env.EMAIL_USER,
-        to:      toList,
+        to:      toAddrs,
         subject: `【麥頭印標】UAT 確認進度待審 — ${params.savedBy}（${dateStr}）`,
         html:    buildHtml(params),
       });
 
       // 發信成功後才更新冷卻時間
       lastNotifiedAt.set(params.savedBy, Date.now());
-      console.info(`[email] Draft notification sent to ${recipients.length} recipient(s): ${toList}`);
+      const toLog = toAddrs.map((a) => `${a.name} <${a.address}>`).join(', ');
+      console.info(`[email] Draft notification sent to ${recipients.length} recipient(s): ${toLog}`);
     } catch (err) {
       console.error('[email/sendDraftNotification Error]', err);
     }

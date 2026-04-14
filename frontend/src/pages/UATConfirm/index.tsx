@@ -43,13 +43,16 @@ export default function UATConfirm({ onToast, user }: Props) {
   const [saving,       setSaving]       = useState(false);
   const [draftInfo,    setDraftInfo]    = useState<{ saved_by: string; saved_role: string; saved_at: string } | null>(null);
   const [submitted,    setSubmitted]    = useState<{ confirmer: string; dept: string; date: string; result: string; actualDoneCount: number } | null>(null);
-  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSaveTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 草稿從 API 載入時設為 true，跳過當次自動暫存，避免將剛讀回的資料再存一次
+  const draftJustLoaded = useRef(false);
 
   // ── 進入頁面自動載入最新草稿 ─────────────────────────
   useEffect(() => {
     api.getLatestUATDraft().then((res) => {
       if (res.success && res.data) {
         const d = res.data;
+        draftJustLoaded.current = true;   // 標記：此次狀態更新來自草稿載入
         setChecked(d.check_items ?? {});
         setItemRemarks(d.item_remarks ?? {});
         setDraftInfo({ saved_by: d.saved_by, saved_role: d.saved_role, saved_at: d.saved_at });
@@ -59,6 +62,11 @@ export default function UATConfirm({ onToast, user }: Props) {
 
   // ── 自動暫存（勾選/意見變動後 3 秒觸發）────────────────
   useEffect(() => {
+    // 草稿載入所觸發的狀態更新不啟動自動暫存
+    if (draftJustLoaded.current) {
+      draftJustLoaded.current = false;
+      return;
+    }
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => {
       const hasData = Object.values(checked).some(Boolean) ||
